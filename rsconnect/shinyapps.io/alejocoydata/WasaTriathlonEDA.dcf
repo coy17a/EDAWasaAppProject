@@ -1,0 +1,13 @@
+name: WasaTriathlonEDA
+title: WasaTriathlonEDA
+username:
+account: alejocoydata
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 761881
+bundleId: 1915239
+url: https://alejocoydata.shinyapps.io/WasaTriathlonEDA/
+when: 1551734095.88182
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: database.csv|Picture1.png

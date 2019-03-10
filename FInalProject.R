@@ -199,3 +199,5 @@ p_all<- round(predict(model_all, prediction_time))
       mutate_at(c(2,6:10),as.numeric)%>%
       mutate_at(c("gender","category"),factor)
   }
+###
+  

@@ -6,6 +6,7 @@
 #Load libraries    
 
 library(shiny)
+library(readr)
 library(ggplot2)
 library(shinythemes)
 library(gridExtra) 
@@ -14,80 +15,13 @@ library(lubridate)
 library(stringr)
 library(tidyr)  
 library(ggdark) #graphs
-library(rvest)  #web scraping
+library(leaflet)  #web scraping
+library(DT)
 
 #--------------------------------------------------------
-#Web scraping using rvest
-years <- c("2018","2017","2016","2015","2014","2013")
-years[3]
-dfs <- vector("list",1) # creat list to append results
-
-#loop for create a list with the dataframe for all years in vector years
-for (i in 1:length(years)){
-  url1 <- c("2018","2017","2016")
-  url2 <- c("2015","2014","2013")
-  if (years[i] %in% url1){
-    url <-paste0("https://www.startlinetiming.com/en/races/",years[i],"/wasa/event/Standard")
-  } else {
-    url <- paste0("https://www.startlinetiming.com/en/races/",years[i],"/wasa")
-  }
-  webpage <- read_html(url)
-  table_data_html <- html_nodes(webpage,".table-condensed td")
-  results <- html_text(table_data_html)
-  headers<- html_nodes(webpage,".table-condensed th")
-  header_names <- html_text(headers)
-  head(header_names,13)
-  ## Creating Data Frame
-  results2 <- results
-  length(results2) <- 13 * ceiling(length(results) / 13)
-  mat <- matrix(results2,, 13, byrow = TRUE)
-  df <- as.data.frame(mat, stringsAsFactors = FALSE)
-  colnames(df) <- header_names
-  df <- tbl_df(df) #transform to tibble data frame for use in tidyverse
-  dfs[[i]] <- df
-}
-
-# correcting typos from the web page
-dfs[[5]] <- tbl_df(dfs[[5]])%>%
-  rename('Place/Division'= "Place/Divsion")
-dfs[[6]] <- tbl_df(dfs[[6]])%>%
-  rename('Place/Division'= "Place/Divsion")
-
-# Function to wrangling the data, x is the dataframe and y is the year. 
-
-cleandata <- function(x,y) {
-  x %>%
-    mutate(Swim=str_replace(Swim,"\n",""),Division=str_replace_all(Division,"\n|[:space:]",""), Name = str_replace_all(Name,"\n",""))%>%
-    mutate_at(c(3,9,11,13),hms)%>%
-    mutate_at(c(10,12),ms)%>%
-    mutate_at(c(3,9:13),as.numeric)%>%
-    fill(9:13)%>%
-    rename(category ="Division",age_group = "Place/Division",genderP ="Place/Gender")%>%
-    separate(age_group,into = c("AgePosition","ToalAge"), sep = "/")%>%
-    separate(genderP,into = c("GenderPosition","ToaGender"), sep = "/")%>%
-    separate(Place,into = c("Position","TotalP"), sep = "/")%>%
-    select(-c("Event","Race #","ToalAge","ToaGender","TotalP"))%>%
-    mutate_at(c(5:6,1),as.numeric)%>%
-    filter(str_detect(category,"(^F|^M)(?=\\d)"))%>%
-    mutate(gender = ifelse(str_detect(category,"F"),"F","M"))%>%
-    mutate(gender = as.factor(gender),year = y,category = str_replace(category,"[A-Z]",""))%>%
-    mutate(category = str_replace(category,"OLY",""))%>%
-    mutate(category = str_replace(category,"70\\+","7074"))%>%
-    filter(!is.na(Time))
-}
-
-#clean data for all element in the list
-w18 <- cleandata(dfs[[1]],2018)
-w17 <- cleandata(dfs[[2]],2017)
-w16 <- cleandata(dfs[[3]],2016)
-w15 <- cleandata(dfs[[4]],2015)
-w14 <- cleandata(dfs[[5]],2015)
-w13 <- cleandata(dfs[[6]],2013)
-
-#create a findal data frame with all years
-wasaData <-bind_rows(w18,w17,w16,w15,w14,w13)
+wasaData <- read_csv("wasaData.csv")
 wasaData <- wasaData %>%
-  mutate(category = factor(category), year = factor(year))
+  mutate_at(c("Event","category","gender","year"),factor)
 
 # label the axis for formating time 
 yLabels <- function(x)
@@ -99,15 +33,11 @@ yLabels <- function(x)
 # cahnge dataframe for using in lineal regresion model
 clean_lm <- function(x){
   x%>%
-    select(-c("Name","year"))
+    select(-c("Name","Event"))
 }
-
-wasaDataLm <-clean_lm(wasaData)
-#Formulas for  the two models. Outcome is changed
 flm1 <- formula(Position ~ Swim+T1+Bike+T2+Run)
 flm2 <- formula(AgePosition ~ Swim+T1+Bike+T2+Run)
-#Model for all the data 
-model_all <- lm(flm1,data=wasaDataLm)
+
 #------------------------------------------------------------------------
 
 # Define UI 
@@ -125,7 +55,13 @@ ui <- navbarPage( theme = shinytheme("cyborg"), #shinny themse selector
               ),
               p("To check the reulst you have tow option: Overall results and by Categories. Select the Tab you prfer and have Fun!!"),
               br(),
+              leafletOutput("wasaMap"),
               h3("Participation Information"),
+              selectInput(inputId = "distance1",
+                          label="Select Event: ",
+                          choices = c("Olympic","Sprint"),
+                          selected = "Olympic"
+                          ),
               checkboxGroupInput(inputId = "selected_yeartotal",
                                  label = "Select year:",
                                  choices = c("2018","2017","2016","2015","2014","2013"),
@@ -150,7 +86,13 @@ ui <- navbarPage( theme = shinytheme("cyborg"), #shinny themse selector
                             inline = TRUE
                             
          
-      )), htmlOutput(outputId = "titleBarplot"),
+      ),
+      selectInput(inputId = "distance2",
+                  label="Select Event: ",
+                  choices = c("Olympic","Sprint"),
+                  selected = "Olympic"
+      )
+      ), htmlOutput(outputId = "titleBarplot"),
          div(plotOutput(outputId = "mainPlot",width = "100%"),align="center",width ="70%"),
          hr(),
          plotOutput("histogram")
@@ -178,6 +120,11 @@ ui <- navbarPage( theme = shinytheme("cyborg"), #shinny themse selector
                                    selected = "2018",
                                    inline = TRUE
                                    
+                ),
+                selectInput(inputId = "distance3",
+                            label="Select Event: ",
+                            choices = c("Olympic","Sprint"),
+                            selected = "Olympic"
                 )),
              plotOutput("timePlot2"),
              hr(),
@@ -188,6 +135,11 @@ ui <- navbarPage( theme = shinytheme("cyborg"), #shinny themse selector
               fluidPage(
                 sidebarLayout(
                   sidebarPanel(
+                    selectInput(inputId = "distance4",
+                                label="Select the Event: ",
+                                choices = c("Olympic","Sprint"),
+                                selected = "Olympic"
+                    ),
                     selectInput( inputId = "catA",
                                  label = "Select Age Group:",
                                  choices = c("18-24" = "1824", "25-29" = "2529", "30-34" = "3034",
@@ -204,7 +156,7 @@ ui <- navbarPage( theme = shinytheme("cyborg"), #shinny themse selector
                   ),
                   sliderInput( inputId= "Swimmin",
                                 label= "Swim Time min:",
-                                min = 20,
+                                min = 10,
                                 max = 59,
                                 value = 30,
                                 step = 1
@@ -234,7 +186,7 @@ ui <- navbarPage( theme = shinytheme("cyborg"), #shinny themse selector
                       ),
                   sliderInput( inputId= "Bikemin",
                                 label= "Bike Time min:",
-                                min = 55,
+                                min = 30,
                                 max = 200,
                                 value = 73,
                                 step = 1
@@ -264,7 +216,7 @@ ui <- navbarPage( theme = shinytheme("cyborg"), #shinny themse selector
                   ),
                   sliderInput( inputId= "Runmin",
                                 label= "Run Time min:",
-                                min = 30,
+                                min = 15,
                                 max = 200,
                                 value = 53,
                                 step = 1
@@ -281,11 +233,22 @@ ui <- navbarPage( theme = shinytheme("cyborg"), #shinny themse selector
                   
                   ),
                   mainPanel(
-                    p("Please input the time for each sport and transition using the sliders in the left tab. Age group can be selected to predict position specifically for each group"),
+                    h5("Please input the time for each sport and transition using the sliders in the left tab. Age group can be selected to predict position specifically for each group"),
+                    br(),br(),
+                    h4("Splits for Prediction:"),
+                    dataTableOutput(outputId = "raceTime"),
                     htmlOutput(outputId = "results"),
-                    htmlOutput(outputId = "resultsAge")
+                    htmlOutput(outputId = "resultsAge"),
+                    br(),br(),
+                    dataTableOutput(outputId = "podiumaverage"),
+                    htmlOutput(outputId = "podium")
                     )
                 )  
+              )
+            ),
+   tabPanel( title = "Search",
+             fluidPage(
+              dataTableOutput(outputId = "search")  
               )
             )
    
@@ -294,7 +257,24 @@ ui <- navbarPage( theme = shinytheme("cyborg"), #shinny themse selector
 # Define server logic r
 server <- function(input, output) {
           
-          #reactive function for filter data in order to plot "Total Time vs Race Position" - tab caregoriees, overall
+          
+            wasaData1 <- reactive({
+              wasaData %>%
+                filter(Event == input$distance1 )
+            })
+            wasaData2 <- reactive({
+              wasaData %>%
+                filter(Event == input$distance2 )
+            })
+            wasaData3 <- reactive({
+              wasaData %>%
+                filter(Event == input$distance3 )
+            })
+            wasaData4 <- reactive({
+              wasaData %>%
+                filter(Event == input$distance4 )
+            })
+            #reactive function for filter data in order to plot "Total Time vs Race Position" - tab caregories
             wasaDataF <-reactive({
             req(input$selected_year)
             year_selection <- c()
@@ -304,28 +284,28 @@ server <- function(input, output) {
           
             if(input$Gender != "all"){
               if(input$AgeGroup !="all"){
-                wasaData %>%
+                wasaData3() %>%
                 
                 filter(year %in% year_selection)%>%
                 filter((category==input$AgeGroup & gender==input$Gender))
               }
               else {
-                wasaData %>% filter(year %in% year_selection)%>%
+                wasaData3() %>% filter(year %in% year_selection)%>%
                 filter(gender==input$Gender)
               }
             }else if(input$AgeGroup != "all"){
-              wasaData %>% filter(year %in% year_selection)%>%
+              wasaData3() %>% filter(year %in% year_selection)%>%
               filter(category==input$AgeGroup)
               } 
              else{
-               wasaData %>% filter(year %in% year_selection)
+               wasaData3() %>% filter(year %in% year_selection)
             }
               })
           # Reactive Function for ploting the average time for each sport and categroy- Tab Overall
           wasafilter <- reactive({
             req(input$selected_year)
             if(input$GenderMain !="all"){
-              wasafilter1 <- wasaData %>%
+              wasafilter1 <- wasaData2() %>%
                   filter(year == input$selected_year)%>%
                   filter(gender == input$GenderMain)%>%
                   group_by(category)%>%
@@ -335,7 +315,7 @@ server <- function(input, output) {
 
             
             } else 
-              wasafilter1 <- wasaData %>%
+              wasafilter1 <- wasaData2() %>%
                   filter(year == input$selected_year)%>%
                   group_by(category)%>%
                   summarise(Swim = mean(Swim),Bike = mean(Bike),Run = mean(Run))%>%
@@ -347,21 +327,25 @@ server <- function(input, output) {
           wasafilterGender <-reactive({
             req(input$GenderMain)
             if(input$GenderMain != "all"){
-                filter(wasaData,(gender==input$GenderMain))
+                filter(wasaData2(),(gender==input$GenderMain))
             }
               else {
-                 wasaData
+                 wasaData2()
             }
           })
         
          #Reactive function for filter by year after Gender filter Histrograms Plots - tab overall 
          wasafilterAll <- reactive ({
            req(input$selected_year)
-           if(input$selected_year != 'all'){
-             filter(wasafilterGender(),(year == input$selected_year))
-           }else {
-             wasafilterGender()
+           year_selection2 <- c()
+           for(i in 1:length(input$selected_year)) {
+             year_selection2 <- c(year_selection2,input$selected_year[i])
            }
+           #if(input$selected_year != 'all'){
+             filter(wasafilterGender(),(year %in% year_selection2))
+           #}else {
+            # wasafilterGender()
+           #}
          })
     
          
@@ -461,7 +445,7 @@ server <- function(input, output) {
           for(i in 1:length(input$selected_yeartotal)) {
             year_total <- c(year_total,input$selected_yeartotal[i])
           }
-          wasaData %>%
+          wasaData1() %>%
           group_by(category,year,gender)%>%
           summarize(Athletes = n())%>%
           filter(year %in% year_total)
@@ -475,7 +459,7 @@ server <- function(input, output) {
         })
           
         totalnumberAthletes <- reactive({
-          wasaData %>%
+          wasaData1() %>%
           group_by(year,gender)%>%
           summarize(Athletes = n())
           
@@ -487,6 +471,13 @@ server <- function(input, output) {
             dark_theme_gray(base_size = 14)+
            ggtitle("Total Participant By Year")
        })
+       
+      output$wasaMap <- renderLeaflet({
+        leaflet()%>%
+          setView(lng =-115.74, lat =49.789 , zoom =12)%>%
+          addTiles()%>%
+          addMarkers(-115.740950,49.789852,label="Wasa Triathlon")
+      }) 
       output$Athletes <- renderPlot(
         grid.arrange(a1(),a2(),ncol=2)
       )
@@ -513,7 +504,7 @@ server <- function(input, output) {
         ggplot(data = wasaDataF(), aes(x= AgePosition, y = Time, color=year,linetype=gender))+
           geom_point()+
           geom_line()+
-          dark_theme_gray()+
+          dark_theme_gray(base_size = 14)+
           ylab("Total Time")+
           xlab("Age Group Position")+
           ggtitle("Total Time vs Race Position")+
@@ -531,25 +522,63 @@ server <- function(input, output) {
       T2T <- reactive({as.numeric(ms(paste(input$T2min,":",input$T2sec)))})
       runT <- reactive({as.numeric(ms(paste(input$Runmin,":",input$Runsec)))})
       timeAthlete <-reactive({
-        data.frame(Swim=swimT(),T1=T1T(),Bike=bikeT(),T2=T2T(),Run=runT(),gender=input$genderA,category=input$catA)
+        data.frame(Swim=swimT(),T1=T1T(),Bike=bikeT(),T2=T2T(),Run=runT(),Time=swimT()+T1T()+bikeT()+T2T()+runT(),gender=input$genderA,category=input$catA)
       }) 
-
-      
+      timeAthletetoPrint <-reactive({  
+        timeAthlete()%>%
+        mutate_at(1:6,yLabels)
+      })
+      wasaDataLm <-reactive({
+        clean_lm(wasaData4()) 
+        })
+      #Formulas for  the two models. Outcome is changed
+     
+      #Model for all the data 
+      model_all <- reactive({
+        lm(flm1,data=wasaDataLm())
+      })
       #Regresion Model Time 
       #ggcorr(wasaDataLm,label=TRUE,palette="RdBu",label_color = "black",color="black")
       p_all<- reactive({
-        round(predict(model_all, timeAthlete()))
+        round(predict(model_all(), timeAthlete()))
       })
       ##models by age
       wasaDataAge <- reactive({
         if(input$catA !='all' & input$genderA != 'all'){
-        wasaDataLm %>%
+        wasaDataLm() %>%
         filter(category == input$catA, gender == input$genderA)
         }
           })
       pAge <- reactive({
        m <- lm(flm2,data=wasaDataAge())
       round(predict(m,timeAthlete()))
+      })
+      podiumtime <- reactive({
+        wasaDataAge()%>%
+          filter(AgePosition == 3)%>%
+          select(-c("Position","gender"))
+      })
+        mean_podium <- reactive({
+          meanPodium <- round(mean(podiumtime()$Time))
+          yLabels(meanPodium)
+        })
+       
+        
+      podiumtimetoprint <- reactive({
+        podiumtime()%>%
+        mutate_at(c("Time","Swim","T1","Bike","T2","Run"),yLabels)
+      })
+     wasaToPrint <- reactive({
+       wasaData%>%
+         mutate_at(c("Time","Swim","T1","Bike","T2","Run"),yLabels)
+     })
+     
+      output$raceTime <- renderDataTable({
+        datatable(timeAthletetoPrint(), 
+        options = list(pageLength = 1,dom="t"),
+        rownames = FALSE,
+        style ="bootstrap"
+        )
       })
       output$results <- renderUI({
           HTML("<h4>",paste("Predicted Overall  position is: <strong>",p_all())," </h3>")
@@ -559,6 +588,29 @@ server <- function(input, output) {
         HTML("<h4>",paste("Predict Age Group position is Age:<strong>",pAge())," </h3>")
         }
          })
+      output$podiumaverage <- renderDataTable({
+        if(input$catA !='all' & input$genderA != 'all'){
+        datatable(podiumtimetoprint(), 
+                  options = list(dom="t"),
+                  rownames = FALSE
+       ) %>% formatStyle(names(podiumtimetoprint()),color="black")
+      }
+      })
+      output$podium <- renderUI({
+        if(input$catA !='all' & input$genderA != 'all'){
+        HTML("<h4>",paste("Average podium is: <strong>",mean_podium()," </h3>"))
+        }
+      })
+      
+      output$search <- renderDataTable({
+          datatable(wasaToPrint(), 
+                    options = list(pageLength = 10),
+                    rownames = FALSE
+          ) %>% formatStyle(names(wasaToPrint()),color="black")
+     })
+      
+      
+     
 }
 
 # Run the application 

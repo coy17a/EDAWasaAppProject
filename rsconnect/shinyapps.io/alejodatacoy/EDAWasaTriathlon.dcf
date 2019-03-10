@@ -5,9 +5,9 @@ account: alejodatacoy
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 771172
-bundleId: 1921120
+bundleId: 1925852
 url: https://alejodatacoy.shinyapps.io/EDAWasaTriathlon/
-when: 1551917189.59528
+when: 1552070137.58211
 asMultiple: FALSE
 asStatic: FALSE
-ignoredFiles: .RData|database.csv|FInalProject.R|Picture1.png|Pitch.html|Pitch.Rmd
+ignoredFiles: .RData|FInalProject.R|Picture1.png

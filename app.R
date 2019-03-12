@@ -15,13 +15,13 @@ library(lubridate)
 library(stringr)
 library(tidyr)  
 library(ggdark) #graphs
-library(leaflet)  #web scraping
-library(DT)
+library(leaflet)  #maps
+library(DT)#data table
 
 #--------------------------------------------------------
 wasaData <- read_csv("wasaData.csv")
 wasaData <- wasaData %>%
-  mutate_at(c("Event","category","gender","year"),factor)
+  mutate_at(c("Event","category","gender","year"),factor) #creating factor variables
 
 # label the axis for formating time 
 yLabels <- function(x)
@@ -51,10 +51,15 @@ ui <- navbarPage( theme = shinytheme("cyborg"), #shinny themse selector
                h2("Olimpic Wasa Triathlon Analytics"),
               hr(),
               p( "In its promotional campaign, the race is described as: “Gerick Sports Wasa Lake Triathlon features elite prize money and attracts some of the fastest triathletes in the West. Age groupers and elites compete together on a scenic and fast course.” Wasa Lake is located in the beautiful province of British Columbia just west from the Rocky Mountains and 4 hours away from Calgary.
-                 In this exploratory data analysis project, we will explore the 2018 results for the Olympic race distance (1.5 km swim, 40 km bike ,10 km run). I retrieved the data from the official timing company’s websiteand a copy of the file is available in the GitHub folderof the project."
+                 In this exploratory data analysis project, we will explore the results for the Olympic race distance (1.5 km swim, 40 km bike ,10 km run) and Sprint distance (750 m swim, 20 km bike ,5 km run). I scrap the data from the official timing company’s websiteand a copy of the file is available in the GitHub folderof the project."
               ),
-              p("To check the reulst you have tow option: Overall results and by Categories. Select the Tab you prfer and have Fun!!"),
+              p("To check the results you have two option: Overall results and by Categories. Select the Tab you prfer and have Fun!!"),
               br(),
+              p("In Addition the app has a predictor that took in consideration the results of the previous six years and predict your overall and age group position. Go to Prediction tab"),
+              br(),
+              p("Finally you can look for any result in the tab 'Search'. Just type the name"),
+              br(),
+              h4("Wasa Lake Location"),
               leafletOutput("wasaMap"),
               h3("Participation Information"),
               selectInput(inputId = "distance1",
@@ -257,7 +262,9 @@ ui <- navbarPage( theme = shinytheme("cyborg"), #shinny themse selector
 # Define server logic r
 server <- function(input, output) {
           
-          
+#-------------------------------------------------------
+#Logic for filtering the data set by Event
+#-------------------------------------------------------
             wasaData1 <- reactive({
               wasaData %>%
                 filter(Event == input$distance1 )
@@ -274,7 +281,8 @@ server <- function(input, output) {
               wasaData %>%
                 filter(Event == input$distance4 )
             })
-            #reactive function for filter data in order to plot "Total Time vs Race Position" - tab caregories
+            
+#reactive function for filter data in order to plot "Total Time vs Race Position" - tab caregories
             wasaDataF <-reactive({
             req(input$selected_year)
             year_selection <- c()
@@ -301,7 +309,7 @@ server <- function(input, output) {
                wasaData3() %>% filter(year %in% year_selection)
             }
               })
-          # Reactive Function for ploting the average time for each sport and categroy- Tab Overall
+# Reactive Function for ploting the average time for each sport and categroy- Tab Overall
           wasafilter <- reactive({
             req(input$selected_year)
             if(input$GenderMain !="all"){
@@ -323,7 +331,7 @@ server <- function(input, output) {
                   mutate(sport = factor(sport,levels = c("Run","Bike","Swim")))
           })
           
-          #Reactive function for filter by gender
+#Reactive function for filter by gender tab -overall
           wasafilterGender <-reactive({
             req(input$GenderMain)
             if(input$GenderMain != "all"){
@@ -334,7 +342,7 @@ server <- function(input, output) {
             }
           })
         
-         #Reactive function for filter by year after Gender filter Histrograms Plots - tab overall 
+   #Reactive function for filter by year after Gender filter Histrograms Plots - tab overall 
          wasafilterAll <- reactive ({
            req(input$selected_year)
            year_selection2 <- c()
@@ -349,7 +357,7 @@ server <- function(input, output) {
          })
     
          
-         #"Total Time vs Race Position -tab overall"
+        #"Total Time vs Race Position -tab overall"
           m1 <- reactive({ggplot(data = wasafilterAll(), aes(x= Position, y = Time, color=year))+
             geom_point()+
             theme_light()+
@@ -394,7 +402,7 @@ server <- function(input, output) {
               ggtitle("Bike")+
               scale_x_continuous(labels = yLabels)
           })
-          #Histogram for Run  - tab overall 
+        #Histogram for Run  - tab overall 
           h3 <- reactive({
             ggplot(data = wasafilterAll(), aes( x = Run,fill= year))+
               geom_histogram(alpha=0.5,position="identity",binwidth = 180)+

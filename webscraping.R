@@ -60,25 +60,26 @@ olympic[[5]] <- fix_name(olympic[[5]])
 cleandata <- function(x,y) {
      x %>%
     mutate(Swim=str_replace(Swim,"\n",""),Division=str_replace_all(Division,"\n|[:space:]",""), Name = str_replace_all(Name,"\n",""),Event = str_replace_all(Event,"\n|[:space:]",""))%>%
-    mutate_at(c(3,9,11,13),hms)%>%
+    mutate_at(c(3,9,11,13),hms)%>% #transform to perion using lubridate
     mutate_at(c(10,12),ms)%>%
-    mutate_at(c(3,9:13),as.numeric)%>%
-    fill(9:13)%>%
+    mutate_at(c(3,9:13),as.numeric)%>% #transfro to seconds to input
+    fill(9:13)%>% #input missing date
     rename(category ="Division",age_group = "Place/Division",genderP ="Place/Gender")%>%
     separate(age_group,into = c("AgePosition","ToalAge"), sep = "/")%>%
     separate(genderP,into = c("GenderPosition","ToaGender"), sep = "/")%>%
     separate(Place,into = c("Position","TotalP"), sep = "/")%>%
     select(-c("Race #","ToalAge","ToaGender","TotalP"))%>%
     mutate_at(c(6:7,2),as.numeric)%>%
-    filter(str_detect(category,"(^F|^M)(?=\\d)"))%>%
-    mutate(gender = ifelse(str_detect(category,"F"),"F","M"))%>%
+    filter(str_detect(category,"(^F|^M)(?=\\d)"))%>%# filtering relay teams
+    mutate(gender = ifelse(str_detect(category,"F"),"F","M"))%>% # create gender column
     mutate(gender = as.factor(gender),year = y,category = str_replace(category,"[A-Z]",""))%>%
-    mutate(category = str_replace(category,"OLY|SPR",""))%>%
-    mutate(category = str_replace(category,"70\\+","7074"))%>%
-    mutate(Event = ifelse(str_detect(Event,"Sprint"),"Sprint","Olympic"))%>%
+    mutate(category = str_replace(category,"OLY|SPR",""))%>% #remove characters from category
+    mutate(category = str_replace(category,"70\\+","7074"))%>% 
+    mutate(Event = ifelse(str_detect(Event,"Sprint"),"Sprint","Olympic"))%>% #leave only two levels in Event
     filter(!is.na(Time))
 }
 
+#sprind data
 ws18 <- cleandata(sprint[[1]],2018)
 ws17 <- cleandata(sprint[[2]],2017)
 ws16 <- cleandata(sprint[[3]],2016)
@@ -93,16 +94,13 @@ wo15 <- cleandata(olympic[[4]],2015)
 wo14 <- cleandata(olympic[[5]],2014)
 wo13 <- cleandata(olympic[[6]],2013)
 
-
+#join all datasets
 wasaData <-bind_rows(wo18,wo17,wo16,wo15,wo14,wo13,ws18,ws17,ws16,ws15,ws14,ws13)
 wasaData <- wasaData %>%
 mutate(category = factor(category), year = factor(year),Event=factor(Event))
-str(wasaData)
-levels(wasaData$Event)
+
 #Save The data Frame for use in the app
-write.csv(wasaData, file="wasaData.csv", row.names = FALSE) #avoid to have an extra column with numbers
+write_csv(wasaData, file="wasaData.csv", row.names = FALSE) #avoid to have an extra column with numbers
 
 
-test1 <- wasaData %>%
-  filter(category =="3034",gender=="M",AgePosition== 3,Event=="Olympic")
-mean(test1$Time )
+
